@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.metadata
+from collections.abc import Callable
+from importlib.metadata import EntryPoint
 from typing import Any
 
 from shadowgate.plugins.base import Registry
@@ -15,9 +17,14 @@ def load_builtins(registry: Registry) -> None:
         registry.register(mod.action)
 
 
-def load_entry_points(registry: Registry) -> list[str]:
+def load_entry_points(
+    registry: Registry,
+    allow: Callable[[EntryPoint], bool] | None = None,
+) -> list[str]:
     loaded: list[str] = []
     for ep in importlib.metadata.entry_points(group=ENTRY_GROUP):
+        if allow is not None and not allow(ep):
+            continue
         obj: Any = ep.load()
         action = obj() if isinstance(obj, type) else obj
         registry.register(action)

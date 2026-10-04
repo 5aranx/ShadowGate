@@ -60,10 +60,15 @@ def sign_manifest(payload: dict[str, object], key: OrgKey) -> str:
     return base64.b64encode(sig).decode()
 
 
-def verify_manifest(payload: dict[str, object], signature_b64: str, key: OrgKey) -> bool:
+def verify_manifest(
+    payload: dict[str, object],
+    signature_b64: str,
+    key: OrgKey | ed25519.Ed25519PublicKey,
+) -> bool:
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    public = key.public if isinstance(key, OrgKey) else key
     try:
-        key.public.verify(base64.b64decode(signature_b64), canonical)
+        public.verify(base64.b64decode(signature_b64), canonical)
     except Exception:
         return False
     return True

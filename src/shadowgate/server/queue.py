@@ -48,14 +48,25 @@ class SqlQueue:
         )
         self._conn.commit()
 
-    def claim_next(self) -> ClaimedJob | None:
-        cur = self._conn.execute(
-            """
-            UPDATE qjobs SET status='running'
-            WHERE id = (SELECT id FROM qjobs WHERE status='queued' ORDER BY rowid LIMIT 1)
-            RETURNING id, action, params
-            """
-        )
+    def claim_next(self, agent_id: str | None = None) -> ClaimedJob | None:
+        if agent_id is None:
+            cur = self._conn.execute(
+                """
+                UPDATE qjobs SET status='running'
+                WHERE id = (SELECT id FROM qjobs WHERE status='queued' ORDER BY rowid LIMIT 1)
+                RETURNING id, action, params
+                """
+            )
+        else:
+            cur = self._conn.execute(
+                """
+                UPDATE qjobs SET status='running'
+                WHERE id = (SELECT id FROM qjobs WHERE status='queued'
+                            AND agent_id=? ORDER BY rowid LIMIT 1)
+                RETURNING id, action, params
+                """,
+                (agent_id,),
+            )
         row = cur.fetchone()
         self._conn.commit()
         if row is None:
