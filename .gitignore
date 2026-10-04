@@ -7,3 +7,5 @@ __pycache__/
 *.db
 .shadowgate/
 .env
+*.db-shm
+*.db-wal
