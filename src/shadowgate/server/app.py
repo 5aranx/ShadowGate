@@ -188,6 +188,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def healthz() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/")
+    def root() -> Any:
+        from starlette.responses import RedirectResponse
+
+        return RedirectResponse(url="/ui")
+
     from starlette.templating import Jinja2Templates
 
     templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "web" / "templates"))
