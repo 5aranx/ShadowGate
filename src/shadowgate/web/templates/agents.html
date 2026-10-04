@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Agents ({{ agents|length }})</h2>
+<table>
+  <tr><th>id</th><th>tags</th><th>enrolled</th></tr>
+  {% for a in agents %}
+  <tr><td>{{ a.id }}</td><td>{{ a.tags }}</td><td>{{ a.enrolled_at }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

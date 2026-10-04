@@ -259,3 +259,9 @@ class RunEngine:
             "SELECT step,status FROM run_steps WHERE run_id=?", (run_id,)
         ).fetchall()
         return {"id": row[0], "runbook": row[1], "status": row[2], "steps": dict(steps)}
+
+    def list_runs(self) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT id, runbook, status, created_at FROM runs ORDER BY created_at DESC"
+        ).fetchall()
+        return [{"id": r[0], "runbook": r[1], "status": r[2], "created_at": r[3]} for r in rows]

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Job queue</h2>
+<table>
+  <tr><th>status</th><th>count</th></tr>
+  {% for status, count in stats.items() %}
+  <tr><td>{{ status }}</td><td>{{ count }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

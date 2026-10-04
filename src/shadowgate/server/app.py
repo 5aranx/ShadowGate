@@ -152,6 +152,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def healthz() -> dict[str, str]:
         return {"status": "ok"}
 
+    from fastapi import Request
+    from starlette.templating import Jinja2Templates
+
+    templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "web" / "templates"))
+
+    def render(request: Request, name: str, context: dict[str, Any]) -> Any:
+        return templates.TemplateResponse(request, name, context)
+
+    @app.get("/ui")
+    def ui(request: Request) -> Any:
+        return render(request, "agents.html", {"agents": store.list_agents()})
+
+    @app.get("/ui/agents")
+    def ui_agents(request: Request) -> Any:
+        return render(request, "agents.html", {"agents": store.list_agents()})
+
+    @app.get("/ui/jobs")
+    def ui_jobs(request: Request) -> Any:
+        return render(request, "jobs.html", {"stats": store.queue.stats()})
+
+    @app.get("/ui/runs")
+    def ui_runs(request: Request) -> Any:
+        return render(request, "runs.html", {"runs": store.engine.list_runs()})
+
     return app
 
 
