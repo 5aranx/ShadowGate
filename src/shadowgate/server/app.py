@@ -35,6 +35,12 @@ class JobRequest(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
 
 
+class RunRequest(BaseModel):
+    runbook: str
+
+
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     data_dir = Path(settings.data_dir)
@@ -95,7 +101,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         store.queue.complete(req.job_id, req.ok, req.data)
         store.audit.append("job_completed", actor="agent", target=req.job_id,
                            detail={"ok": req.ok, "error": req.error})
+        store.engine.on_job_result(req.job_id, req.ok)
         return {"status": "recorded"}
+
+    @app.post("/runbooks")
+    def register_runbook(body: dict[str, Any], store: Store = Depends(get_store)) -> dict[str, Any]:
+        import json as _json
+
+        from shadowgate.server.orchestrator import parse_runbook, validate
+
+        spec = _json.dumps(body)
+        runbook = parse_runbook(_json.dumps(body))
+        errors = validate(runbook)
+        if errors:
+            raise HTTPException(status_code=400, detail=errors)
+        store.engine.register_runbook(runbook, spec)
+        return {"name": runbook.name, "steps": [s.name for s in runbook.steps]}
+
+    @app.post("/runs")
+    def start_run(req: RunRequest, store: Store = Depends(get_store)) -> dict[str, Any]:
+        from shadowgate.server.orchestrator import parse_runbook
+
+        spec = store.engine.get_runbook_spec(req.runbook)
+        if spec is None:
+            raise HTTPException(status_code=404, detail="unknown runbook")
+        runbook = parse_runbook(spec)
+        run_id = store.engine.start_run(runbook, store.list_agents())
+        return {"run_id": run_id, "status": "running"}
+
+    @app.get("/runs/{run_id}")
+    def run_status(run_id: str, store: Store = Depends(get_store)) -> dict[str, Any]:
+        status = store.engine.run_status(run_id)
+        if status is None:
+            raise HTTPException(status_code=404, detail="unknown run")
+        return status
 
     @app.get("/agents")
     def agents(store: Store = Depends(get_store)) -> dict[str, Any]:

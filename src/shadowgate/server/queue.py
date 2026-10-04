@@ -20,10 +20,14 @@ class SqlQueue:
     thin coroutine around the same pattern. Atomicity comes from a single
     UPDATE constrained to status='queued'."""
 
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, conn: sqlite3.Connection | None = None) -> None:
         self.path = path
-        self._conn = sqlite3.connect(path, check_same_thread=False)
+        if conn is not None:
+            self._conn = conn
+        else:
+            self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._setup()
 
     def _setup(self) -> None:

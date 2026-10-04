@@ -1,0 +1,16 @@
+name: disk-health-audit
+max_concurrent: 2
+steps:
+  - name: inventory
+    action: system_info
+    targets: {tag: linux}
+
+  - name: disk
+    action: disk_health
+    targets: {tag: linux}
+    depends_on: [inventory]
+
+  - name: rollback-disk
+    action: disk_health
+    targets: {tag: linux}
+    compensate_for: disk

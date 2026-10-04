@@ -25,8 +25,12 @@ class Store:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._setup()
-        self.queue = SqlQueue(path)
+        self.queue = SqlQueue(path, conn=self._conn)
         self.audit: AuditLog = audit or AuditLog(str(Path(path).parent / "audit.log"))
+        self._conn.execute("PRAGMA busy_timeout=5000")
+        from shadowgate.server.runs import RunEngine
+
+        self.engine = RunEngine(self._conn, self.queue, self.audit)
 
     def _setup(self) -> None:
         with closing(self._conn.cursor()) as cur:
