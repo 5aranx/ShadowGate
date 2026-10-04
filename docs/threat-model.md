@@ -15,6 +15,10 @@ authorized to administer. It is designed to make unauthorized use hard.
   re-enrollment requires a fresh one-time token.
 - Enrollment tokens are single-use and expire; a second use of a burned token is
   rejected with 403.
+- Operator endpoints are RBAC-gated (`viewer`/`operator`/`admin` bearer
+  tokens via `SHADOWGATE_API_TOKENS`) and `/tokens` + `/enroll` are rate-limited
+  per source IP. With no tokens configured the API is open (dev mode) — set
+  `SHADOWGATE_API_TOKENS` before exposing it.
 - Plugin loads are gated by org signature; an unsigned or tampered manifest is
   rejected before the action object is even imported.
 

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import json
+import time
+from collections import defaultdict
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from shadowgate.config import Settings, get_settings
@@ -56,6 +60,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.store = store
     app.state.audit = audit
 
+    ROLE_ORDER = {"viewer": 0, "operator": 1, "admin": 2}
+
+    try:
+        token_roles: dict[str, str] = json.loads(settings.api_tokens_json or "{}")
+    except json.JSONDecodeError:
+        token_roles = {}
+
+    def require_role(role: str) -> Callable[[Request], None]:
+        def dep(request: Request) -> None:
+            if not token_roles:
+                return  # dev mode: no tokens configured, open
+            header = request.headers.get("authorization", "")
+            scheme, _, token = header.partition(" ")
+            if scheme.lower() != "bearer" or token not in token_roles:
+                raise HTTPException(status_code=401, detail="missing or invalid bearer token")
+            actual = token_roles[token]
+            if ROLE_ORDER.get(actual, -1) < ROLE_ORDER[role]:
+                raise HTTPException(status_code=403, detail=f"requires role {role}")
+
+        return dep
+
+    rate_hits: dict[str, list[float]] = defaultdict(list)
+
+    def rate_limited(request: Request) -> None:
+        key = f"{request.client.host if request.client else 'unknown'}:{request.url.path}"
+        now = time.monotonic()
+        window = [t for t in rate_hits[key] if now - t < 60]
+        rate_hits[key] = window
+        if len(window) >= settings.rate_limit_per_minute:
+            raise HTTPException(status_code=429, detail="rate limit exceeded")
+        window.append(now)
+
     def get_store() -> Store:
         store: Store = app.state.store
         return store
@@ -64,11 +100,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         audit: AuditLog = app.state.audit
         return audit
 
-    @app.post("/tokens")
+    @app.post("/tokens", dependencies=[Depends(rate_limited), Depends(require_role("admin"))])
     def mint_token(store: Store = Depends(get_store)) -> dict[str, str]:
         return {"token": store.mint_token()}
 
-    @app.post("/enroll")
+    @app.post("/enroll", dependencies=[Depends(rate_limited), Depends(require_role("admin"))])
     def enroll(req: EnrollRequest, store: Store = Depends(get_store)) -> dict[str, str]:
         if not store.burn_token(req.token, req.agent_id):
             raise HTTPException(status_code=403, detail="invalid or burned token")
@@ -77,7 +113,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                            detail={"tags": req.tags})
         return {"status": "enrolled", "agent_id": req.agent_id}
 
-    @app.post("/jobs")
+    @app.post("/jobs", dependencies=[Depends(require_role("operator"))])
     def create_job(req: JobRequest, store: Store = Depends(get_store)) -> dict[str, str]:
         import uuid
 
@@ -104,7 +140,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         store.engine.on_job_result(req.job_id, req.ok)
         return {"status": "recorded"}
 
-    @app.post("/runbooks")
+    @app.post("/runbooks", dependencies=[Depends(require_role("admin"))])
     def register_runbook(body: dict[str, Any], store: Store = Depends(get_store)) -> dict[str, Any]:
         import json as _json
 
@@ -118,7 +154,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         store.engine.register_runbook(runbook, spec)
         return {"name": runbook.name, "steps": [s.name for s in runbook.steps]}
 
-    @app.post("/runs")
+    @app.post("/runs", dependencies=[Depends(require_role("operator"))])
     def start_run(req: RunRequest, store: Store = Depends(get_store)) -> dict[str, Any]:
         from shadowgate.server.orchestrator import parse_runbook
 
@@ -136,7 +172,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="unknown run")
         return status
 
-    @app.get("/agents")
+    @app.get("/agents", dependencies=[Depends(require_role("viewer"))])
     def agents(store: Store = Depends(get_store)) -> dict[str, Any]:
         return {"agents": store.list_agents()}
 
@@ -144,7 +180,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def jobs(store: Store = Depends(get_store)) -> dict[str, Any]:
         return {"stats": store.queue.stats()}
 
-    @app.get("/audit")
+    @app.get("/audit", dependencies=[Depends(require_role("viewer"))])
     def audit_log(audit: AuditLog = Depends(get_audit), verify: bool = False) -> dict[str, Any]:
         return {"entries": audit.entries(), "verified": audit.verify_chain() if verify else None}
 
@@ -152,7 +188,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def healthz() -> dict[str, str]:
         return {"status": "ok"}
 
-    from fastapi import Request
     from starlette.templating import Jinja2Templates
 
     templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "web" / "templates"))

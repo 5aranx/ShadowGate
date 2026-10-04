@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     org_key_path: str = ".shadowgate/org_ed25519.key"
     ca_key_path: str = ".shadowgate/ca.key"
     ca_cert_path: str = ".shadowgate/ca.crt"
+    api_tokens_json: str = ""  # e.g. '{"tok-admin":"admin","tok-op":"operator"}'
+    rate_limit_per_minute: int = 60
 
 
 @lru_cache
