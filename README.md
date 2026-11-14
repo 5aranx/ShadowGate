@@ -68,3 +68,10 @@ the gate will load it; otherwise it's dropped before import.
 ## CI
 
 `.github/workflows/ci.yml` runs ruff, mypy --strict, and pytest on every push.
+
+---
+
+<div align="center">
+  <sub>Engineered with precision for secure, scalable systems.</sub><br/>
+  <b>Made by Saransh Singh</b>
+</div>
